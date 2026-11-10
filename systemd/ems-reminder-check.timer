@@ -1,0 +1,13 @@
+# ตั้งเวลาให้ ems-reminder-check.service รันทุก 1 นาที
+# Persistent=true: ถ้าพลาดรอบไป (เช่น NAS reboot ตอนนั้นพอดี) จะ catch-up รันทันทีที่ boot เสร็จ
+
+[Unit]
+Description=Run EMS Task Reminder Check every 1 minute
+
+[Timer]
+OnCalendar=*:0/1
+Persistent=true
+Unit=ems-reminder-check.service
+
+[Install]
+WantedBy=timers.target

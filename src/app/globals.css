@@ -1,0 +1,244 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ============================================
+   Global Styles - สไตล์ทั่วไปของแอปพลิเคชัน
+   ============================================ */
+@font-face {
+  font-family: "THSarabun";
+  src: url("/fonts/THSarabun.ttf") format("truetype");
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+@layer base {
+  :root {
+    /* สีพื้นหลังและตัวอักษรหลัก */
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+
+    /* สีของ card */
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+
+    /* สีของ popover */
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+
+    /* สีหลัก (Primary) - Indigo */
+    --primary: 243 75% 59%;
+    --primary-foreground: 0 0% 100%;
+
+    /* สีรอง (Secondary) - Slate */
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+
+    /* สีที่เบลอ (Muted) */
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
+
+    /* สีเน้น (Accent) */
+    --accent: 210 40% 96.1%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+
+    /* สีทำลาย (Destructive) - Red */
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
+
+    /* สีของ border และ input */
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 243 75% 59%;
+
+    /* รัศมีของมุม */
+    --radius: 0.5rem;
+  }
+
+  /* โหมดมืด (Dark Mode) */
+  .dark {
+    --background: 222.2 84% 4.9%;
+    --foreground: 210 40% 98%;
+
+    --card: 222.2 84% 4.9%;
+    --card-foreground: 210 40% 98%;
+
+    --popover: 222.2 84% 4.9%;
+    --popover-foreground: 210 40% 98%;
+
+    --primary: 217.2 91.2% 59.8%;
+    --primary-foreground: 222.2 47.4% 11.2%;
+
+    --secondary: 217.2 32.6% 17.5%;
+    --secondary-foreground: 210 40% 98%;
+
+    --muted: 217.2 32.6% 17.5%;
+    --muted-foreground: 215 20.2% 65.1%;
+
+    --accent: 217.2 32.6% 17.5%;
+    --accent-foreground: 210 40% 98%;
+
+    --destructive: 0 62.8% 30.6%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 217.2 32.6% 17.5%;
+    --input: 217.2 32.6% 17.5%;
+    --ring: 224.3 76.3% 48%;
+  }
+}
+
+@layer base {
+  /* สไตล์พื้นฐานสำหรับทุก elements */
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "rlig" 1, "calt" 1;
+  }
+
+  /* สไตล์สำหรับ scrollbar */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-slate-100;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-slate-300 rounded-full;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-slate-400;
+  }
+}
+
+@layer components {
+  /* คลาสสำหรับ container หลัก */
+  .container-main {
+    @apply max-w-7xl mx-auto px-4 sm:px-6 lg:px-8;
+  }
+
+  /* คลาสสำหรับ card */
+  .card-hover {
+    @apply transition-all duration-200 hover:shadow-lg hover:-translate-y-0.5;
+  }
+
+  /* คลาสสำหรับ button */
+  .btn-primary {
+    @apply inline-flex items-center justify-center px-4 py-2 
+           bg-indigo-600 text-white font-medium rounded-lg
+           hover:bg-indigo-700 focus:outline-none focus:ring-2 
+           focus:ring-indigo-500 focus:ring-offset-2
+           transition-colors duration-200;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center justify-center px-4 py-2 
+           bg-white text-slate-700 font-medium rounded-lg
+           border border-slate-300
+           hover:bg-slate-50 focus:outline-none focus:ring-2 
+           focus:ring-indigo-500 focus:ring-offset-2
+           transition-colors duration-200;
+  }
+
+  .btn-danger {
+    @apply inline-flex items-center justify-center px-4 py-2 
+           bg-rose-600 text-white font-medium rounded-lg
+           hover:bg-rose-700 focus:outline-none focus:ring-2 
+           focus:ring-rose-500 focus:ring-offset-2
+           transition-colors duration-200;
+  }
+
+  /* คลาสสำหรับ input */
+  .input-field {
+    @apply w-full px-4 py-2.5 rounded-lg border border-slate-300
+           focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500
+           outline-none transition-all duration-200
+           placeholder:text-slate-400;
+  }
+
+  /* คลาสสำหรับ badge */
+  .badge {
+    @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium;
+  }
+
+  .badge-success {
+    @apply badge bg-emerald-100 text-emerald-800;
+  }
+
+  .badge-warning {
+    @apply badge bg-amber-100 text-amber-800;
+  }
+
+  .badge-danger {
+    @apply badge bg-rose-100 text-rose-800;
+  }
+
+  .badge-info {
+    @apply badge bg-blue-100 text-blue-800;
+  }
+
+  /* คลาสสำหรับ sidebar */
+  .sidebar-link {
+    @apply flex items-center gap-3 px-3 py-3 rounded-lg transition-all
+           text-slate-500 hover:bg-slate-50 hover:text-slate-900;
+  }
+
+  .sidebar-link-active {
+    @apply sidebar-link bg-indigo-600 text-white shadow-md shadow-indigo-200
+           hover:bg-indigo-700 hover:text-white;
+  }
+}
+
+@layer utilities {
+  /* คลาสสำหรับซ่อน scrollbar แต่ยังสามารถ scroll ได้ */
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  /* คลาสสำหรับ text gradient */
+  .text-gradient {
+    @apply bg-clip-text text-transparent bg-gradient-to-r from-indigo-600 to-purple-600;
+  }
+
+  /* คลาสสำหรับ animation fade in */
+  .fade-in {
+    animation: fadeIn 0.3s ease-in-out;
+  }
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  /* คลาสสำหรับ animation slide in */
+  .slide-in-right {
+    animation: slideInRight 0.3s ease-out;
+  }
+
+  @keyframes slideInRight {
+    from {
+      transform: translateX(100%);
+      opacity: 0;
+    }
+    to {
+      transform: translateX(0);
+      opacity: 1;
+    }
+  }
+}

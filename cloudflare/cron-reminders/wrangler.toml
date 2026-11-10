@@ -1,0 +1,14 @@
+name = "ems-cron-reminders"
+main = "src/index.ts"
+compatibility_date = "2024-11-01"
+
+# ทำงานทุก 1 นาที (เทียบเท่าคำแนะนำเดิมของ /api/cron/reminders)
+[triggers]
+crons = ["* * * * *"]
+
+# ค่าที่ไม่ใช่ความลับ - ตั้งได้ในไฟล์นี้
+[vars]
+TARGET_URL = "https://ems.example.org/api/cron/reminders"
+
+# CRON_SECRET เป็นความลับ - ห้ามใส่ในไฟล์นี้
+# ตั้งค่าแยกด้วยคำสั่ง: npx wrangler secret put CRON_SECRET

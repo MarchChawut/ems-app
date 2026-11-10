@@ -1,0 +1,2 @@
+-- AlterTable
+ALTER TABLE `users` MODIFY COLUMN `email` VARCHAR(255) NULL;

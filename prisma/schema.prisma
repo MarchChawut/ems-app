@@ -1,0 +1,970 @@
+// ============================================
+// Prisma Schema สำหรับ EMS (Employee Management System)
+// รองรับ MariaDB 10 บน Synology NAS
+// ============================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// Model: User - ข้อมูลผู้ใช้งานระบบ
+// ============================================
+model User {
+  id             Int       @id @default(autoincrement())
+  email          String?   @unique @db.VarChar(255)
+  username       String    @unique @db.VarChar(100)
+  password       String    @db.VarChar(255) // เก็บรหัสผ่านที่เข้ารหัสแล้ว
+  prefix         String?   @db.VarChar(50) // คำนำหน้า เช่น นาย, น.ส., ร.ต., ว่าที่ ร.ต., คุณหญิง
+  name           String    @db.VarChar(100)
+  role           Role      @default(EMPLOYEE)
+  department     String?   @db.VarChar(100) // กอง เช่น กองการศึกษา วิจัย และพัฒนา
+  section        String?   @db.VarChar(100) // แผนก (ส่วนงานย่อย) เช่น ตรวจสอบปฏิบัติการ — เติมอัตโนมัติในใบขอรถยนต์
+  division       String?   @db.VarChar(200) // สังกัด เช่น ศูนย์เทคโนโลยีดิจิทัล หน่วยราชการในพระองค์ (ค่ากลางอยู่ที่ OrgSetting)
+  position       String?   @db.VarChar(100) // ตำแหน่ง เช่น จนท.ฝ่ายธุรการ, ผู้อำนวยการกอง
+  positionSecond String?   @db.VarChar(100) // ตำแหน่งรอง เช่น ลูกจ้างชั่วคราวรายเดือน, เจ้าหน้าที่งานในพระองค์
+  positionLevel  Int? // ระดับ (สำหรับเจ้าหน้าที่งานในพระองค์ 1-11)
+  phone          String?   @db.VarChar(20) // เบอร์โทรศัพท์
+  birthday       DateTime? @db.Date // วันเกิด
+  address        String?   @db.Text // ที่อยู่
+  avatar         String?   @db.VarChar(10) // ตัวย่อชื่อสำหรับแสดง avatar
+  profileImage   String?   @db.VarChar(500) // URL รูปโปรไฟล์
+  signatureFileId String?  // UploadedFile.id ของรูปลายเซ็น (ใช้วางบนแบบฟอร์มลา)
+  isActive       Boolean   @default(true)
+
+  // การยืนยันตัวตนสองชั้น (2FA / TOTP)
+  twoFactorEnabled Boolean @default(false) // เปิดใช้งาน 2FA แล้วหรือยัง
+  twoFactorSecret  String? @db.VarChar(255) // TOTP secret (เข้ารหัส AES-GCM แล้ว)
+
+  // การตั้งค่าความปลอดภัยครั้งแรก (บัญชีที่ผู้ดูแลระบบตั้งรหัสผ่านให้: นำเข้าจากไฟล์/สร้างโดยแอดมิน/รีเซ็ตรหัสผ่าน)
+  mustChangePassword       Boolean   @default(false) // ต้องเปลี่ยนรหัสผ่านก่อนใช้งานส่วนอื่นของระบบ
+  forcePasskeySetup        Boolean   @default(false) // ต้องลงทะเบียน passkey อย่างน้อย 1 อัน (ตอนตั้งค่าครั้งแรก)
+  initialPasswordExpiresAt DateTime? // รหัสผ่านที่แอดมินตั้งให้หมดอายุเมื่อใด (หลังจากนั้นล็อกอินไม่ได้ ต้องให้แอดมินรีเซ็ตใหม่)
+
+  // หัวหน้างาน (ผู้บังคับบัญชาโดยตรง) - ใช้สำหรับลำดับขั้นการอนุมัติการลา
+  supervisorId Int?
+  supervisor   User?  @relation("Supervision", fields: [supervisorId], references: [id], onDelete: SetNull)
+  subordinates User[] @relation("Supervision")
+
+  // ความสัมพันธ์กับตารางอื่น
+  tasks              Task[] // งานที่มอบหมายให้ผู้ใช้
+  leaves             Leave[] // รายการลาของผู้ใช้
+  sessions           Session[] // Session สำหรับการเข้าสู่ระบบ
+  loginAttempts      LoginAttempt[] // ประวัติการพยายามเข้าสู่ระบบ
+  authenticators     Authenticator[] // Passkey (WebAuthn) ที่ลงทะเบียนไว้
+  backupCodes        TwoFactorBackupCode[] // รหัสสำรองสำหรับ 2FA
+  supplyTransactions SupplyTransaction[]   @relation("TxPerformer")
+  checkoutsHeld      AssetCheckout[]       @relation("CheckoutHolder")
+  checkoutsIssued    AssetCheckout[]       @relation("CheckoutIssuer")
+  assetsHeld         Asset[]               @relation("AssetHolder")
+  documentsRecorded  DocumentRegister[]    @relation("DocumentRecorder")
+  formRequests       FormRequest[]         @relation("FormRequester")
+  permissionsHeld    UserPermission[]      @relation("UserPermissionUser")
+  permissionsGranted UserPermission[]      @relation("UserPermissionGrantedBy")
+  rosterAssignments  RosterAssignment[]    @relation("RosterAssignee")
+  rosterCreated      RosterAssignment[]    @relation("RosterCreator")
+  ownedTasks         Task[]                @relation("TaskOwner") // งานส่วนตัว (เห็น/แก้ไขได้เฉพาะเจ้าของ)
+
+  // timestamps
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("users")
+}
+
+// ============================================
+// Model: Session - เก็บข้อมูล session การเข้าสู่ระบบ
+// ใช้สำหรับตรวจสอบและยกเลิก session
+// ============================================
+model Session {
+  id        Int      @id @default(autoincrement())
+  userId    Int
+  token     String   @unique @db.VarChar(500)
+  expiresAt DateTime
+  ipAddress String?  @db.VarChar(45) // IPv6 สูงสุด 45 ตัวอักษร
+  userAgent String?  @db.Text
+  isValid   Boolean  @default(true)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+
+  @@map("sessions")
+}
+
+// ============================================
+// Model: LoginAttempt - บันทึกการพยายามเข้าสู่ระบบ
+// ใช้สำหรับป้องกัน Brute Force Attack
+// ============================================
+model LoginAttempt {
+  id        Int     @id @default(autoincrement())
+  userId    Int?
+  username  String  @db.VarChar(100)
+  ipAddress String  @db.VarChar(45)
+  success   Boolean
+  reason    String? @db.VarChar(255) // เหตุผลที่ล้มเหลว
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+
+  @@index([ipAddress, createdAt])
+  @@index([username, createdAt])
+  @@map("login_attempts")
+}
+
+// ============================================
+// Model: Authenticator - Passkey (WebAuthn credential)
+// เก็บ public key ของอุปกรณ์ที่ลงทะเบียนไว้สำหรับเข้าสู่ระบบด้วย passkey
+// ============================================
+model Authenticator {
+  id           Int     @id @default(autoincrement())
+  credentialId String  @unique @db.VarChar(255) // base64url ของ credential ID
+  publicKey    String  @db.Text // public key เข้ารหัสเป็น base64url
+  counter      Int     @default(0) // ตัวนับการใช้งาน ป้องกัน replay attack
+  transports   String? @db.VarChar(255) // ช่องทางการเชื่อมต่อ คั่นด้วย comma (usb,nfc,internal,...)
+  deviceType   String? @db.VarChar(32) // singleDevice | multiDevice
+  backedUp     Boolean @default(false) // ถูก sync/backup ไปยัง cloud หรือไม่
+  name         String? @db.VarChar(100) // ชื่อที่ผู้ใช้ตั้งให้ เช่น "MacBook Touch ID"
+  userId       Int
+  user         User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt  DateTime  @default(now())
+  lastUsedAt DateTime?
+
+  @@index([userId])
+  @@map("authenticators")
+}
+
+// ============================================
+// Model: WebAuthnChallenge - challenge ชั่วคราวสำหรับ flow ลงทะเบียน/เข้าสู่ระบบ passkey
+// อ้างอิงด้วย id ที่เก็บใน cookie ชั่วคราว ใช้ครั้งเดียวแล้วลบทิ้ง
+// ============================================
+model WebAuthnChallenge {
+  id        String   @id @default(cuid())
+  challenge String   @db.VarChar(255)
+  userId    Int? // ผู้ใช้ที่เกี่ยวข้อง (ลงทะเบียน = เจ้าของ session, login = ผู้ใช้เป้าหมาย)
+  expiresAt DateTime
+
+  createdAt DateTime @default(now())
+
+  @@index([expiresAt])
+  @@map("webauthn_challenges")
+}
+
+// ============================================
+// Model: TwoFactorBackupCode - รหัสสำรองสำหรับ 2FA (ใช้ครั้งเดียว, เก็บแบบ hash)
+// ============================================
+model TwoFactorBackupCode {
+  id        Int       @id @default(autoincrement())
+  userId    Int
+  codeHash  String    @db.VarChar(255) // bcrypt hash ของรหัสสำรอง
+  usedAt    DateTime? // เวลาที่ถูกใช้ (null = ยังไม่ถูกใช้)
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("two_factor_backup_codes")
+}
+
+// ============================================
+// Model: TwoFactorChallenge - สถานะ "รอยืนยัน 2FA" ชั่วคราวระหว่าง login
+// อ้างอิงด้วย id ที่เก็บใน cookie ชั่วคราว (2fa_pending)
+// ============================================
+model TwoFactorChallenge {
+  id            String   @id @default(cuid())
+  userId        Int // ผู้ใช้ที่ผ่านการตรวจรหัสผ่านแล้ว รอยืนยันปัจจัยที่สอง
+  pendingSecret String?  @db.VarChar(255) // TOTP secret ที่กำลังลงทะเบียน (เข้ารหัส) เฉพาะตอน enroll
+  attempts      Int      @default(0) // จำนวนครั้งที่กรอกรหัสผิด (กัน brute force)
+  expiresAt     DateTime
+
+  createdAt DateTime @default(now())
+
+  @@index([expiresAt])
+  @@map("two_factor_challenges")
+}
+
+// ============================================
+// Model: KanbanColumn - คอลัมน์ในระบบ Kanban
+// ============================================
+model KanbanColumn {
+  id        Int     @id @default(autoincrement())
+  name      String  @db.VarChar(50)
+  color     String  @default("slate") @db.VarChar(20) // สีของคอลัมน์ (slate, blue, emerald, amber, rose, purple)
+  order     Int     @default(0) // ลำดับการแสดงผล
+  isDefault Boolean @default(false) // คอลัมน์เริ่มต้นที่ไม่สามารถลบได้
+
+  // ความสัมพันธ์
+  tasks Task[] // งานในคอลัมน์นี้
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([order])
+  @@map("kanban_columns")
+}
+
+// ============================================
+// Model: Task - งานในระบบ Kanban
+// ============================================
+model Task {
+  id             Int       @id @default(autoincrement())
+  title          String    @db.VarChar(255)
+  description    String?   @db.Text
+  columnId       Int       @default(1) // อ้างอิงถึง KanbanColumn
+  priority       Priority  @default(MEDIUM)
+  assigneeId     Int?
+  ownerId        Int? // null = งานส่วนรวม (ทุกคนเห็น แก้ไขได้เฉพาะ ADMIN/SUPER_ADMIN) / มีค่า = งานส่วนตัวของผู้ใช้นั้น (เห็นได้เฉพาะเจ้าของ)
+  reminderAt     DateTime? // วัน/เวลาแจ้งเตือน (เจาะจงเวลา)
+  reminderSentAt DateTime? // วัน/เวลาที่ส่งแจ้งเตือนแบบเจาะจงเวลาเข้ากลุ่ม LINE ไปแล้ว (กันส่งซ้ำ)
+
+  // แจ้งเตือนอัตโนมัติเพิ่มเติม คำนวณจากวันที่ของ reminderAt (ไม่ใช่ค่าที่ผู้ใช้กรอกเอง)
+  reminderDayBeforeAt     DateTime? // = วันที่ของ reminderAt ลบ 1 วัน เวลา 19:00
+  reminderDayBeforeSentAt DateTime? // ส่งแจ้งเตือนล่วงหน้า 1 วันแล้วหรือยัง
+  reminderOnDayAt         DateTime? // = วันที่ของ reminderAt เวลา 08:00
+  reminderOnDaySentAt     DateTime? // ส่งแจ้งเตือนวันจริงแล้วหรือยัง
+
+  archivedAt DateTime? // วัน/เวลาที่เก็บถาวร
+  folderId   Int? // แฟ้มที่เก็บงานนี้ไว้ (ใช้เฉพาะตอนเก็บถาวร)
+
+  // ความสัมพันธ์
+  column   KanbanColumn @relation(fields: [columnId], references: [id], onDelete: Restrict)
+  assignee User?        @relation(fields: [assigneeId], references: [id], onDelete: SetNull)
+  owner    User?        @relation("TaskOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  folder   TaskFolder?  @relation(fields: [folderId], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([columnId])
+  @@index([assigneeId])
+  @@index([ownerId])
+  @@index([folderId])
+  @@map("tasks")
+}
+
+// ============================================
+// Model: TaskFolder - แฟ้มสำหรับจัดหมวดหมู่งานที่เก็บถาวร
+// ============================================
+model TaskFolder {
+  id        Int      @id @default(autoincrement())
+  name      String   @db.VarChar(100)
+  order     Int      @default(0) // ลำดับการแสดงผล
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // ความสัมพันธ์
+  tasks Task[] // งานที่เก็บถาวรไว้ในแฟ้มนี้
+
+  @@index([order])
+  @@map("task_folders")
+}
+
+// ============================================
+// Model: CronLock - ป้องกัน cron job รันซ้อนกัน (atomic claim, self-healing)
+// ============================================
+model CronLock {
+  name      String    @id @db.VarChar(64) // ชื่อ job เช่น "reminders"
+  lockedAt  DateTime? // เวลาที่ถือ lock อยู่ (null = ว่าง)
+  lockedBy  String?   @db.VarChar(128) // hostname:pid ของ process ที่ถือ lock (สำหรับ debug)
+  updatedAt DateTime  @updatedAt
+
+  @@map("cron_locks")
+}
+
+// ============================================
+// Model: CronExecutionLog - ประวัติการรัน cron job แต่ละครั้ง
+// ============================================
+model CronExecutionLog {
+  id         Int       @id @default(autoincrement())
+  jobName    String    @db.VarChar(64) // "reminders"
+  startedAt  DateTime  @default(now())
+  finishedAt DateTime?
+  status     String    @db.VarChar(16) // "running" | "success" | "error"
+  checked    Int       @default(0)
+  sent       Int       @default(0)
+  failed     Int       @default(0)
+  error      String?   @db.Text
+
+  @@index([jobName, startedAt])
+  @@map("cron_execution_logs")
+}
+
+// ============================================
+// Model: Leave - รายการลาของพนักงาน
+// ============================================
+model Leave {
+  id         Int         @id @default(autoincrement())
+  userId     Int
+  type       LeaveType
+  startDate  DateTime    @db.Date
+  endDate    DateTime    @db.Date
+  reason     String      @db.Text
+  status     LeaveStatus @default(PENDING)
+  adminReviewedBy Int? // ID ของธุรการที่ตรวจสอบขั้นที่ 1 (ผู้ตรวจสอบ)
+  adminReviewedAt DateTime?
+  supervisorApprovedBy Int? // ID ของหัวหน้างานที่อนุมัติขั้นที่ 2 (null = ยังไม่ถึงขั้นนี้ หรือถูกปฏิเสธไปก่อน)
+  supervisorApprovedAt DateTime?
+  approvedBy Int? // ID ของผู้ดำเนินการขั้นสุดท้าย (ผอ.กองอนุมัติ หรือผู้ปฏิเสธไม่ว่าขั้นไหน)
+  approvedAt DateTime?
+
+  // ข้อมูลเพิ่มเติมสำหรับฟอร์ม
+  isHalfDay      Boolean            @default(false) // ลาครึ่งวันหรือไม่
+  hours          Float? // จำนวนชั่วโมงที่ลา (ถ้าลาเป็นชั่วโมง)
+  outTime        String?            @db.VarChar(5) // เวลาออก (HH:mm) - มาสาย/ออกก่อนเวลา/ออกนอกเขตฯ
+  backTime       String?            @db.VarChar(5) // เวลากลับ (HH:mm) - มาสาย/ออกก่อนเวลา/ออกนอกเขตฯ
+  formCategory   LeaveFormCategory? // แบบส่ง กบก. / แบบเก็บสถิติ (เลือกได้อย่างเดียว)
+  totalDays      Float              @default(0) // จำนวนวันลารวม (คำนวณจากกฎ)
+  contactAddress String?            @db.Text // สถานที่พักขณะลา (ในระหว่างลาจะติดต่อข้าพเจ้าได้ที่)
+  signaturePlacement Json? // ตำแหน่ง/ขนาดลายเซ็นผู้ลาบนแบบฟอร์ม { x, y, width } หน่วย mm (null = ไม่แสดงลายเซ็น)
+
+  // ความสัมพันธ์
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([status])
+  @@index([startDate, endDate])
+  @@map("leaves")
+}
+
+// ============================================
+// Model: LeaveRule - กฎเกณฑ์การลา (Admin กำหนด)
+// ============================================
+model LeaveRule {
+  id                 Int    @id @default(autoincrement())
+  name               String @db.VarChar(100)
+  startTime          String @db.VarChar(5) // เวลาเริ่มต้น เช่น "08:30"
+  endTime            String @db.VarChar(5) // เวลาสิ้นสุด เช่น "16:30"
+  fullDayHours       Float  @default(8) // จำนวนชั่วโมง = 1 วัน
+  halfDayHours       Float  @default(4) // จำนวนชั่วโมง = 0.5 วัน
+  maxConsecutiveDays Int    @default(30) // จำนวนวันลาติดต่อกันสูงสุด
+
+  // สูตรคำนวณวันลาจากชั่วโมง (ใช้จริงในการคำนวณ Leave.totalDays - ดู src/lib/leave-calc.ts)
+  hourThreshold   Float @default(3) // ลาเป็นชั่วโมงไม่เกินนี้ = ครึ่งวัน, เกิน = เต็มวัน
+  halfDayFraction Float @default(0.5) // สัดส่วนวันลาสำหรับ "ครึ่งวัน"
+
+  // ปีงบประมาณที่กฎนี้มีผล (ปีที่ปีงบประมาณเริ่มต้น 1 ต.ค.) - null = กฎเริ่มต้น/fallback ที่ไม่ผูกปีใดปีหนึ่ง
+  fiscalYear Int?    @unique
+  isActive   Boolean @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("leave_rules")
+}
+
+// ============================================
+// Model: Department - แผนก/กอง (Admin จัดการได้)
+// ============================================
+model Department {
+  id          Int     @id @default(autoincrement())
+  name        String  @unique @db.VarChar(100) // ชื่อแผนก เช่น กองการศึกษา วิจัย และพัฒนา
+  description String? @db.VarChar(255)
+  isActive    Boolean @default(true)
+  order       Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isActive, order])
+  @@map("departments")
+}
+
+// ============================================
+// Model: Position - ตำแหน่งหลัก (Admin จัดการได้)
+// ============================================
+model Position {
+  id          Int     @id @default(autoincrement())
+  name        String  @unique @db.VarChar(100) // ชื่อตำแหน่ง เช่น จนท.ฝ่ายธุรการ
+  description String? @db.VarChar(255)
+  isActive    Boolean @default(true)
+  order       Int     @default(0) // ลำดับการแสดงผล
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isActive, order])
+  @@map("positions")
+}
+
+// ============================================
+// Model: PositionSecond - ตำแหน่งรอง (Admin จัดการได้)
+// ============================================
+model PositionSecond {
+  id          Int     @id @default(autoincrement())
+  name        String  @unique @db.VarChar(100) // ชื่อตำแหน่งรอง เช่น เจ้าหน้าที่งานในพระองค์
+  description String? @db.VarChar(255)
+  hasLevel    Boolean @default(false) // มีระดับหรือไม่ (1-11)
+  maxLevel    Int? // ระดับสูงสุด (ถ้ามี)
+  isActive    Boolean @default(true)
+  order       Int     @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isActive, order])
+  @@map("position_seconds")
+}
+
+// ============================================
+// Model: Holiday - วันหยุดของหน่วยงาน (Admin กำหนด)
+// ============================================
+model Holiday {
+  id          Int      @id @default(autoincrement())
+  date        DateTime @db.Date // วันที่หยุด
+  name        String   @db.VarChar(200) // ชื่อวันหยุด เช่น วันสงกรานต์
+  description String?  @db.VarChar(500)
+  year        Int // ปี พ.ศ. หรือ ค.ศ.
+  isActive    Boolean  @default(true)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([date])
+  @@index([year, isActive])
+  @@map("holidays")
+}
+
+// ============================================
+// Enums - ประเภทข้อมูลที่ใช้ซ้ำ
+// ============================================
+
+// บทบาทของผู้ใช้
+enum Role {
+  SUPER_ADMIN // ผู้ดูแลระบบสูงสุด
+  ADMIN // ผู้ดูแลระบบ
+  MANAGER // ผู้จัดการ
+  DIRECTOR // ผู้อำนวยการกอง (ผู้อนุมัติ/ลงนาม)
+  EMPLOYEE // พนักงานทั่วไป
+  HR // ฝ่ายบุคคล
+}
+
+// สถานะของงาน
+enum TaskStatus {
+  TODO // รอดำเนินการ
+  IN_PROGRESS // กำลังทำ
+  DONE // เสร็จสิ้น
+}
+
+// ระดับความสำคัญ
+enum Priority {
+  LOW // ต่ำ
+  MEDIUM // ปานกลาง
+  HIGH // สูง
+  URGENT // เร่งด่วน
+}
+
+// ประเภทการลา
+enum LeaveType {
+  SICK // ลาป่วย
+  PERSONAL // ลากิจ
+  MATERNITY // ลาคลอดบุตร
+  ORDINATION // ลาบวช
+  EARLY_LEAVE // ออกก่อนเวลา
+  LATE_ARRIVAL // มาสาย
+  RUN_AN_ERRAND // ออกนอกเขตพระราชฐาน
+  OTHER // อื่นๆ
+}
+
+// สถานะการลา
+enum LeaveStatus {
+  PENDING              // รอธุรการตรวจสอบ
+  ADMIN_REVIEWED       // ธุรการตรวจสอบแล้ว รอหัวหน้างานเซ็น
+  SUPERVISOR_APPROVED  // หัวหน้างานอนุมัติแล้ว รอ ผอ.กองพิจารณา
+  APPROVED             // อนุมัติแล้ว (ผอ.กองอนุมัติขั้นสุดท้าย)
+  REJECTED             // ไม่อนุมัติ (จากขั้นตอนใดก็ได้)
+}
+
+// ประเภทแบบฟอร์ม (เลือกได้อย่างเดียว)
+enum LeaveFormCategory {
+  KBK // แบบส่ง กบก.
+  STATS // แบบเก็บสถิติ
+}
+
+// ============================================
+// Enums - พัสดุ และ ครุภัณฑ์
+// ============================================
+
+// ประเภทพัสดุ
+enum SupplyType {
+  STOCK // คงคลัง - ติดตามจำนวน
+  NON_STOCK // ไม่คงคลัง - จัดซื้อตรง ไม่ติดตามจำนวน
+}
+
+// ประเภทรายการเคลื่อนไหวพัสดุ (เฉพาะ STOCK)
+enum TransactionType {
+  RECEIVE // รับเข้า
+  ISSUE // เบิกจ่าย
+  RETURN // คืน
+  ADJUST // ปรับยอด
+}
+
+// สถานะครุภัณฑ์
+enum AssetStatus {
+  AVAILABLE // พร้อมใช้งาน
+  IN_USE // ถูกใช้งานอยู่
+  IN_REPAIR // ส่งซ่อม
+  RETURNED // ส่งคืนคลัง
+  DISPOSED // ตัดจำหน่าย
+}
+
+// สภาพครุภัณฑ์
+enum AssetCondition {
+  EXCELLENT // สภาพดีมาก
+  GOOD // สภาพดี
+  FAIR // สภาพพอใช้
+  POOR // สภาพไม่ดี
+  DAMAGED // เสียหาย
+}
+
+// ============================================
+// Model: SupplyCategory - หมวดหมู่พัสดุ
+// ============================================
+model SupplyCategory {
+  id          Int     @id @default(autoincrement())
+  name        String  @unique @db.VarChar(100)
+  description String? @db.VarChar(255)
+  isActive    Boolean @default(true)
+  order       Int     @default(0)
+
+  supplies Supply[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isActive, order])
+  @@map("supply_categories")
+}
+
+// ============================================
+// Model: Supply - พัสดุ (คงคลัง / ไม่คงคลัง)
+// ============================================
+model Supply {
+  id         Int             @id @default(autoincrement())
+  name       String          @db.VarChar(200)
+  type       SupplyType
+  categoryId Int?
+  category   SupplyCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  // รหัสพัสดุ (สำหรับติดสินค้า)
+  supplyCode String? @db.VarChar(100) // รหัสพัสดุที่ติดบนสินค้า
+
+  // จำนวน (เฉพาะ STOCK)
+  unit            String? @db.VarChar(50)
+  currentQuantity Int     @default(0) // อัปเดตด้วย $transaction
+  minimumQuantity Int     @default(0) // จำนวนขั้นต่ำ - สำหรับแจ้งเตือน
+  maximumQuantity Int     @default(0) // จำนวนสูงสุดที่ควรมีในคลัง
+  thresholdRed    Int     @default(20) // % ต่ำกว่านี้ = แดง (เทียบกับ minimumQuantity)
+  thresholdYellow Int     @default(50) // % ต่ำกว่าหรือเท่านี้ = เหลือง
+
+  // ข้อมูลจัดซื้อ
+  supplier       String?   @db.VarChar(200)
+  unitPrice      Decimal?  @db.Decimal(12, 2)
+  documentNumber String?   @db.VarChar(100) // เลขที่เอกสารรับ
+  documentUrl    String?   @db.VarChar(500) // URL ไฟล์ PDF แนบ
+  imageUrl       String?   @db.VarChar(500) // URL รูปภาพพัสดุ
+  issueDate      DateTime? @db.Date // วันที่เบิกของ
+  recorderName   String?   @db.VarChar(200) // ชื่อผู้ลงข้อมูล
+
+  notes    String? @db.Text
+  isActive Boolean @default(true)
+
+  transactions SupplyTransaction[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([type, isActive])
+  @@index([categoryId])
+  @@map("supplies")
+}
+
+// ============================================
+// Model: SupplyTransaction - รายการเคลื่อนไหวพัสดุ (STOCK)
+// ============================================
+model SupplyTransaction {
+  id       Int    @id @default(autoincrement())
+  supplyId Int
+  supply   Supply @relation(fields: [supplyId], references: [id], onDelete: Cascade)
+
+  type           TransactionType
+  quantity       Int // จำนวนที่เคลื่อนไหว
+  quantityBefore Int // ยอดก่อนทำรายการ
+  quantityAfter  Int // ยอดหลังทำรายการ
+
+  documentNumber     String? @db.VarChar(100) // เลขที่เอกสาร
+  documentUrl        String? @db.VarChar(500) // URL ไฟล์ PDF แนบ
+  recipientName      String? @db.VarChar(200) // ชื่อผู้รับ (กรณีเบิก)
+  returnerName       String? @db.VarChar(200) // ชื่อผู้คืน (กรณีคืน)
+  returnReceiverName String? @db.VarChar(200) // ชื่อผู้รับคืน (กรณีคืน)
+  adjusterName       String? @db.VarChar(200) // ชื่อผู้ปรับยอด (กรณีปรับยอด)
+  notes              String? @db.Text
+
+  performedById Int
+  performedBy   User @relation("TxPerformer", fields: [performedById], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([supplyId, createdAt])
+  @@index([performedById])
+  @@map("supply_transactions")
+}
+
+// ============================================
+// Model: AssetCategory - หมวดหมู่ครุภัณฑ์
+// ============================================
+model AssetCategory {
+  id          Int     @id @default(autoincrement())
+  name        String  @unique @db.VarChar(100)
+  description String? @db.VarChar(255)
+  isActive    Boolean @default(true)
+  order       Int     @default(0)
+
+  assets Asset[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isActive, order])
+  @@map("asset_categories")
+}
+
+// ============================================
+// Model: Asset - ครุภัณฑ์
+// ============================================
+model Asset {
+  id           Int            @id @default(autoincrement())
+  name         String         @db.VarChar(200)
+  assetTag     String?        @unique @db.VarChar(50) // รหัสครุภัณฑ์ เช่น 00193
+  serialNumber String?        @db.VarChar(100) // หมายเลขซีเรียล เช่น 7440-001-0003 (2/66)
+  model        String?        @db.VarChar(100)
+  brand        String?        @db.VarChar(100)
+  categoryId   Int?
+  category     AssetCategory? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  status    AssetStatus    @default(AVAILABLE)
+  condition AssetCondition @default(GOOD)
+
+  // ผู้ครอบครองปัจจุบัน (denormalized เพื่อ query เร็ว)
+  currentHolderId Int?
+  currentHolder   User? @relation("AssetHolder", fields: [currentHolderId], references: [id], onDelete: SetNull)
+
+  // ข้อมูลการจัดซื้อ
+  acquisitionDate DateTime? @db.Date
+  acquisitionCost Decimal?  @db.Decimal(12, 2)
+  documentNumber  String?   @db.VarChar(100) // เลขที่หนังสือรับ
+  documentUrl     String?   @db.VarChar(500) // URL ไฟล์ PDF แนบ
+
+  location   String? @db.VarChar(200)
+  department String? @db.VarChar(100)
+  imageUrl   String? @db.VarChar(500) // รูปครุภัณฑ์
+  notes      String? @db.Text
+  isActive   Boolean @default(true)
+
+  receiverName            String?         @db.VarChar(200) // ชื่อผู้รับ-บันทึก
+  lastInspectionDate      DateTime?       @db.Date // วันที่ตรวจล่าสุด
+  lastInspectionCondition AssetCondition? // สภาพเมื่อตรวจล่าสุด
+  lastInspectedBy         String?         @db.VarChar(200) // ผู้ตรวจล่าสุด
+
+  checkouts AssetCheckout[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status, isActive])
+  @@index([categoryId])
+  @@index([currentHolderId])
+  @@map("assets")
+}
+
+// ============================================
+// Model: AssetCheckout - ประวัติยืม-คืนครุภัณฑ์
+// ============================================
+model AssetCheckout {
+  id      Int   @id @default(autoincrement())
+  assetId Int
+  asset   Asset @relation(fields: [assetId], references: [id], onDelete: Cascade)
+
+  holderId Int
+  holder   User @relation("CheckoutHolder", fields: [holderId], references: [id], onDelete: Restrict)
+
+  issuedById Int
+  issuedBy   User @relation("CheckoutIssuer", fields: [issuedById], references: [id], onDelete: Restrict)
+
+  checkedOutAt     DateTime  @default(now())
+  returnedAt       DateTime? // null = ยังไม่คืน
+  expectedReturnAt DateTime? // วันคืนที่กำหนด
+  notes            String?   @db.Text
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([assetId, returnedAt])
+  @@index([holderId])
+  @@index([issuedById])
+  @@map("asset_checkouts")
+}
+
+// ไฟล์อัปโหลด (รูปภาพ/เอกสาร) เก็บ byte ไว้ในฐานข้อมูลกลาง
+// เพื่อให้ทุกเครื่องที่เชื่อมต่อ DB เดียวกันมองเห็นรูปได้ (ไม่ผูกกับดิสก์เครื่องใดเครื่องหนึ่ง)
+model UploadedFile {
+  id           String   @id @default(cuid())
+  data         Bytes // MySQL native = LONGBLOB
+  mimeType     String   @db.VarChar(100)
+  fileName     String   @db.VarChar(255)
+  size         Int
+  uploadedById Int?
+  createdAt    DateTime @default(now())
+
+  @@map("uploaded_files")
+}
+
+// ============================================
+// Enum: DocumentDirection - ทิศทางเอกสาร (หนังสือเข้า/หนังสือออก)
+// ============================================
+enum DocumentDirection {
+  RECEIVE // หนังสือเข้า
+  SEND // หนังสือออก
+}
+
+// ============================================
+// Enum: DocumentCategory - ประเภทของหนังสือ
+// ============================================
+enum DocumentCategory {
+  MEMO // บันทึกข้อความ
+  EXTERNAL_LETTER // หนังสือภายนอก
+  PW_NEWS // พว.แจ้งข่าว
+  VEHICLE_SUPPORT_REQUEST // ขอรับสนับสนุนยานพาหนะ
+  REFRESHMENT_SUPPORT_REQUEST // ขอรับสนับสนุนอาหารว่าง
+}
+
+// ============================================
+// Model: DocumentRegister - ทะเบียนรับ-ส่งเอกสาร
+// ============================================
+model DocumentRegister {
+  id             Int               @id @default(autoincrement())
+  date           DateTime          @db.Date // วันที่ของเอกสาร
+  subject        String            @db.VarChar(500) // เรื่อง
+  direction      DocumentDirection // ทิศทาง: หนังสือเข้า/หนังสือออก
+  category       DocumentCategory? // ประเภทของหนังสือ
+  documentNumber String?           @db.VarChar(100) // เลขที่เอกสาร
+  recipientName  String?           @db.VarChar(200) // ชื่อผู้รับ
+  senderName     String?           @db.VarChar(200) // ชื่อผู้ส่ง
+  remarks        String?           @db.Text // หมายเหตุ
+  isActive       Boolean           @default(true)
+
+  recordedById Int
+  recordedBy   User @relation("DocumentRecorder", fields: [recordedById], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([direction, date])
+  @@index([isActive, date])
+  @@index([recordedById])
+  @@map("document_registers")
+}
+
+// ============================================
+// Enum: FormRequestType - ประเภทแบบฟอร์มขอเอกสารภายใน
+// ============================================
+enum FormRequestType {
+  VEHICLE_REQUEST // ขอรถยนต์หลวง
+  REFRESHMENT_REQUEST // ขอรับสนับสนุนอาหารว่าง
+  MEETING_ROOM_REQUEST // ขอใช้ห้องประชุม
+  SPEAKER_REQUEST // ขอความอนุเคราะห์วิทยากร
+}
+
+// สถานะการอนุมัติแบบฟอร์ม (ใช้เฉพาะแบบฟอร์มที่ยื่นผ่าน FormTemplate แบบไดนามิก)
+// null = ไม่มี workflow อนุมัติ (แบบฟอร์มเดิม 4 ประเภทที่ผ่านมา เป็นแค่บันทึก+พิมพ์)
+enum FormRequestStatus {
+  PENDING // รอพิจารณา
+  APPROVED // อนุมัติแล้ว
+  REJECTED // ไม่อนุมัติ
+}
+
+// ============================================
+// Model: FormRequest - แบบฟอร์มขอเอกสารภายใน (บันทึก + พิมพ์)
+// ============================================
+model FormRequest {
+  id             Int              @id @default(autoincrement())
+  // null สำหรับแบบฟอร์มที่ admin สร้างเองผ่าน form builder (ไม่มี systemKey ให้ map เข้า enum นี้)
+  type           FormRequestType?
+  requestDate    DateTime         @db.Date // วันที่ที่ระบุในแบบฟอร์ม (เช่น วันที่เดินทาง/วันที่จัดงาน)
+  documentNumber String?          @db.VarChar(100) // เลขที่หนังสือ (กรอกภายหลังได้)
+  data           Json // field เฉพาะของแต่ละประเภทแบบฟอร์ม
+
+  // ทุกแบบฟอร์มที่ยื่นใหม่ (ตั้งแต่ dynamic form builder) ต้องผูกกับ template เสมอ
+  templateId Int?
+  template   FormTemplate? @relation(fields: [templateId], references: [id], onDelete: Restrict)
+
+  // เพิ่มสำหรับ workflow อนุมัติ - null = ไม่มี workflow (ค่าเริ่มต้นของแบบฟอร์มเดิม)
+  status     FormRequestStatus?
+  approvedBy Int?
+  approvedAt DateTime?
+
+  requestedById Int
+  requestedBy   User @relation("FormRequester", fields: [requestedById], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([type, requestDate])
+  @@index([requestedById])
+  @@index([templateId])
+  @@index([status])
+  @@map("form_requests")
+}
+
+// ============================================
+// Model: FormTemplate / FormTemplateField - แบบฟอร์มที่ admin สร้าง/แก้ไขเองได้ (dynamic form builder)
+// ============================================
+model FormTemplate {
+  id            Int     @id @default(autoincrement())
+  systemKey     String? @unique @db.VarChar(50) // ตั้งเฉพาะ 4 แบบฟอร์มเดิมที่ migrate มาจาก formTemplates.ts เช่น "VEHICLE_REQUEST"
+  menuTitle     String  @db.VarChar(200) // ชื่อที่แสดงบนการ์ดเลือกแบบฟอร์ม
+  documentTitle String  @db.VarChar(300) // ชื่อเรื่องที่พิมพ์บนเอกสาร
+  isActive      Boolean @default(true)
+  order         Int     @default(0)
+
+  fields      FormTemplateField[]
+  submissions FormRequest[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([isActive, order])
+  @@map("form_templates")
+}
+
+model FormTemplateField {
+  id         Int          @id @default(autoincrement())
+  templateId Int
+  template   FormTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  key       String  @db.VarChar(100) // ใช้เป็น property key ใน FormRequest.data
+  label     String  @db.VarChar(200)
+  inputType String  @default("text") @db.VarChar(20) // text | number | time | date | textarea | select
+  required  Boolean @default(false)
+  order     Int     @default(0)
+  options   Json? // string[] สำหรับ inputType = "select"
+
+  @@unique([templateId, key])
+  @@index([templateId, order])
+  @@map("form_template_fields")
+}
+
+// ============================================
+// Model: RolePermission / UserPermission - สิทธิ์การใช้งานที่ admin กำหนดได้
+// RolePermission = ค่า default ตาม role, UserPermission = override เฉพาะรายคน
+// ============================================
+model RolePermission {
+  id            Int      @id @default(autoincrement())
+  role          Role
+  permissionKey String   @db.VarChar(100) // ค่าคงที่จาก src/lib/permissions.ts (PERMISSIONS)
+  createdAt     DateTime @default(now())
+
+  @@unique([role, permissionKey])
+  @@index([role])
+  @@map("role_permissions")
+}
+
+model UserPermission {
+  id            Int      @id @default(autoincrement())
+  userId        Int
+  permissionKey String   @db.VarChar(100)
+  granted       Boolean  @default(true) // true = เพิ่มสิทธิ์นอกเหนือจาก role, false = ตัดสิทธิ์ที่ role ให้ไว้
+  grantedById   Int?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  user      User  @relation("UserPermissionUser", fields: [userId], references: [id], onDelete: Cascade)
+  grantedBy User? @relation("UserPermissionGrantedBy", fields: [grantedById], references: [id], onDelete: SetNull)
+
+  @@unique([userId, permissionKey])
+  @@index([userId])
+  @@map("user_permissions")
+}
+
+// ============================================
+// Enum: RosterCategory - ประเภทงานในตารางเวรประจำกอง
+// ============================================
+enum RosterCategory {
+  DUTY // เวร
+  OFFICIAL_TRIP // ไปราชการ
+  MEETING // ประชุม
+  TRAINING // อบรม/สัมมนา
+  EVENT // งานพิธี/กิจกรรม
+  OTHER // อื่นๆ
+}
+
+// ============================================
+// Model: RosterAssignment - ตารางเวรประจำกอง (ใครไปงานอะไร ที่ไหน เมื่อไร)
+// 1 แถว = 1 คน 1 งาน (งานเดียวกันหลายคนจะสร้างหลายแถว) ใช้ทำสถิติรายคน/รายประเภท
+// ============================================
+model RosterAssignment {
+  id        Int            @id @default(autoincrement())
+  userId    Int
+  user      User           @relation("RosterAssignee", fields: [userId], references: [id], onDelete: Cascade)
+  title     String         @db.VarChar(255) // ชื่องาน/ภารกิจ
+  category  RosterCategory @default(OTHER)
+  location  String?        @db.VarChar(255) // สถานที่
+  startDate DateTime       @db.Date
+  endDate   DateTime       @db.Date
+  startTime String?        @db.VarChar(5) // HH:mm (ไม่บังคับ)
+  endTime   String?        @db.VarChar(5) // HH:mm (ไม่บังคับ)
+  note      String?        @db.Text
+
+  createdById Int
+  createdBy   User @relation("RosterCreator", fields: [createdById], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId, startDate])
+  @@index([startDate, endDate])
+  @@index([createdById])
+  @@map("roster_assignments")
+}
+
+
+// ============================================
+// Model: OrgSetting - ข้อมูลหน่วยงานหลัก (แถวเดียว id = 1)
+// ชื่อสังกัด/ชื่อกองที่ใช้เป็นหัวกระดาษและค่าเริ่มต้นของผู้ใช้ทั้งระบบ — แอดมินแก้ได้ที่เดียวจากหน้าตั้งค่า
+// (บุคคลที่ช่วยราชการจากหน่วยอื่นมี division/department ของตัวเองใน User ได้)
+// ============================================
+model OrgSetting {
+  id             Int      @id
+  divisionName   String   @db.VarChar(200) // ชื่อสังกัด เช่น ศูนย์เทคโนโลยีดิจิทัล หน่วยราชการในพระองค์
+  departmentName String   @db.VarChar(100) // ชื่อกอง เช่น กองการศึกษา วิจัย และพัฒนา
+  updatedAt      DateTime @updatedAt
+  updatedById    Int?
+
+  @@map("org_settings")
+}
+
+
+// ============================================
+// Model: FeatureSetting - เปิด/ปิดฟีเจอร์ + ค่าเริ่มต้นต่อฟีเจอร์ (1 แถวต่อฟีเจอร์)
+// ไม่มีแถว = ค่าเริ่มต้นใน src/lib/features.ts (ทุกฟีเจอร์เปิด) — แต่ละหน่วยงานที่ติดตั้งระบบตั้งของตัวเองได้
+// ============================================
+model FeatureSetting {
+  featureKey  String   @id @db.VarChar(50)
+  enabled     Boolean  @default(true)
+  options     Json? // ตัวเลือกย่อย { key: boolean }
+  config      Json? // ค่าเริ่มต้นของฟีเจอร์ { key: string | number }
+  updatedAt   DateTime @updatedAt
+  updatedById Int?
+
+  @@map("feature_settings")
+}

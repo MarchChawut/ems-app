@@ -1,0 +1,75 @@
+# ============================================
+# Docker Compose สำหรับ EMS (Employee Management System)
+# ใช้สำหรับรัน MariaDB บน Synology NAS หรือเครื่องอื่นๆ
+# ============================================
+
+version: '3.8'
+
+services:
+  # ============================================
+  # MariaDB Database
+  # ============================================
+  mariadb:
+    image: mariadb:10.11
+    container_name: ems-mariadb
+    restart: unless-stopped
+    environment:
+      # รหัสผ่านต้องตั้งผ่าน environment/.env เสมอ — ห้ามมีค่าเริ่มต้นฝังในไฟล์นี้ (เดิมมี fallback ที่เดาง่ายอยู่ใน git)
+      MYSQL_ROOT_PASSWORD: ${DB_ROOT_PASSWORD:?ต้องตั้ง DB_ROOT_PASSWORD}
+      # สร้าง database อัตโนมัติ
+      MYSQL_DATABASE: ${DB_NAME:-ems_db}
+      # สร้าง user อัตโนมัติ
+      MYSQL_USER: ${DB_USER:-ems_user}
+      MYSQL_PASSWORD: ${DB_PASSWORD:?ต้องตั้ง DB_PASSWORD}
+    ports:
+      # ผูกกับ 127.0.0.1 เป็นค่าเริ่มต้น (เดิม publish ทุก interface = ใครในเครือข่ายก็ต่อ DB ได้)
+      # ถ้าต้องให้เครื่องอื่นต่อ (เช่นผ่าน Tailscale) ให้ตั้ง DB_BIND_ADDRESS เป็น IP ของ interface นั้นเท่านั้น ห้ามใช้ 0.0.0.0
+      - "${DB_BIND_ADDRESS:-127.0.0.1}:${DB_PORT:-3306}:3306"
+    volumes:
+      # เก็บข้อมูลถาวร
+      - mariadb_data:/var/lib/mysql
+      # โฟลเดอร์สำหรับ init scripts (ถ้ามี)
+      - ./init:/docker-entrypoint-initdb.d:ro
+    command: >
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_unicode_ci
+      --default-authentication-plugin=mysql_native_password
+      --innodb-buffer-pool-size=256M
+      --max-connections=100
+    networks:
+      - ems-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-p${DB_ROOT_PASSWORD}"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+
+  # ============================================
+  # phpMyAdmin (Optional) - สำหรับจัดการฐานข้อมูลผ่าน Web
+  # ============================================
+  phpmyadmin:
+    image: phpmyadmin/phpmyadmin:5.2.2 # ปักเวอร์ชัน (ห้ามใช้ :latest — เปลี่ยนเงียบๆ และอาจมีช่องโหว่)
+    container_name: ems-phpmyadmin
+    restart: unless-stopped
+    environment:
+      PMA_HOST: mariadb
+      PMA_PORT: 3306
+      PMA_ARBITRARY: 0
+    ports:
+      - "127.0.0.1:${PMA_PORT:-8080}:80" # เข้าผ่านเครื่องนี้เท่านั้น (ใช้ SSH tunnel ถ้าต้องการจากที่อื่น)
+    depends_on:
+      - mariadb
+    networks:
+      - ems-network
+    profiles:
+      - admin
+      # ใช้คำสั่ง: docker-compose --profile admin up -d
+
+volumes:
+  mariadb_data:
+    driver: local
+
+networks:
+  ems-network:
+    driver: bridge

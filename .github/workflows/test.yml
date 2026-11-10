@@ -1,0 +1,88 @@
+name: Test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      mariadb-test:
+        image: mariadb:10.11
+        env:
+          MYSQL_ROOT_PASSWORD: testrootpassword
+          MYSQL_DATABASE: ems_test
+          MYSQL_USER: test
+          MYSQL_PASSWORD: test
+        ports:
+          - 3307:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost -u root -ptestrootpassword"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      # ค่าทั้งหมดเป็นค่าเทสคงที่ (ไม่ใช่ secret จริง) ผูกกับ mariadb-test service ด้านบนเท่านั้น
+      # ดูคำอธิบายรูปแบบเดียวกันใน .env.test.example — ห้ามชี้ไปที่ฐานข้อมูล production เด็ดขาด
+      - name: Create .env.test
+        run: |
+          cat > .env.test <<'EOF'
+          DATABASE_URL="mysql://test:test@localhost:3307/ems_test"
+          NODE_ENV=test
+          PORT=3000
+          CRON_SECRET="test-cron-secret-not-real"
+          TWO_FACTOR_ENC_KEY="dEdTVbjLYnaU5RFgw35ThAN5yafVabaueJ22RF5sDrA="
+          SESSION_EXPIRY_HOURS=24
+          MAX_LOGIN_ATTEMPTS=5
+          LOCKOUT_DURATION_MINUTES=30
+          COOKIE_SECURE=false
+          COOKIE_SAMESITE=strict
+          RP_ID=localhost
+          RP_NAME="EMS Test"
+          WEBAUTHN_ORIGIN="http://localhost:3000"
+          LINE_CHANNEL_ACCESS_TOKEN="test-not-real"
+          LINE_CHANNEL_SECRET="test-not-real"
+          LINE_GROUP_ID="test-not-real"
+          NEXTAUTH_SECRET="test-nextauth-secret-not-real"
+          NEXTAUTH_URL="http://localhost:3000"
+          TZ=Asia/Bangkok
+          EOF
+
+      - name: Apply migrations to test database
+        run: pnpm exec prisma migrate deploy
+        env:
+          DATABASE_URL: mysql://test:test@localhost:3307/ems_test
+
+      - name: Run unit + integration tests (Vitest)
+        run: pnpm test
+
+      - name: Install Playwright browsers
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Run E2E tests (Playwright)
+        run: pnpm test:e2e
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
+          if-no-files-found: ignore

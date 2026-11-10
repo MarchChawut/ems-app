@@ -1,0 +1,24 @@
+-- AlterTable
+ALTER TABLE `leaves` ADD COLUMN `hours` DOUBLE NULL,
+    ADD COLUMN `isHalfDay` BOOLEAN NOT NULL DEFAULT false,
+    ADD COLUMN `totalDays` DOUBLE NOT NULL DEFAULT 0,
+    MODIFY `type` ENUM('SICK', 'PERSONAL', 'VACATION', 'MATERNITY', 'ORDINATION', 'OTHER') NOT NULL;
+
+-- AlterTable
+ALTER TABLE `users` ADD COLUMN `division` VARCHAR(200) NULL;
+
+-- CreateTable
+CREATE TABLE `leave_rules` (
+    `id` INTEGER NOT NULL AUTO_INCREMENT,
+    `name` VARCHAR(100) NOT NULL,
+    `startTime` VARCHAR(5) NOT NULL,
+    `endTime` VARCHAR(5) NOT NULL,
+    `fullDayHours` DOUBLE NOT NULL DEFAULT 8,
+    `halfDayHours` DOUBLE NOT NULL DEFAULT 4,
+    `maxConsecutiveDays` INTEGER NOT NULL DEFAULT 30,
+    `isActive` BOOLEAN NOT NULL DEFAULT true,
+    `createdAt` DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    `updatedAt` DATETIME(3) NOT NULL,
+
+    PRIMARY KEY (`id`)
+) DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;

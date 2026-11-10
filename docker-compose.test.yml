@@ -1,0 +1,35 @@
+# ============================================
+# Docker Compose สำหรับฐานข้อมูลเทส (แยกจาก docker-compose.yml ของ production เด็ดขาด)
+# ============================================
+# ใช้ค่าคงที่ตรงๆ (ไม่อ้าง .env ของ production) เพื่อไม่ให้เผลอไปแชร์ค่ากับฐานข้อมูลจริง
+# รัน:   pnpm test:db:up
+# ปิด:   pnpm test:db:down
+
+services:
+  mariadb-test:
+    image: mariadb:10.11
+    container_name: ems-mariadb-test
+    restart: unless-stopped
+    environment:
+      MYSQL_ROOT_PASSWORD: testrootpassword
+      MYSQL_DATABASE: ems_test
+      MYSQL_USER: test
+      MYSQL_PASSWORD: test
+    ports:
+      - "127.0.0.1:3307:3306"
+    volumes:
+      - mariadb_test_data:/var/lib/mysql
+    command: >
+      --character-set-server=utf8mb4
+      --collation-server=utf8mb4_unicode_ci
+      --default-authentication-plugin=mysql_native_password
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-ptestrootpassword"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+
+volumes:
+  mariadb_test_data:
+    driver: local

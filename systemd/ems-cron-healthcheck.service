@@ -1,0 +1,29 @@
+# ==================================================
+# EMS Cron Health Check - oneshot, triggered by ems-cron-healthcheck.timer
+# ==================================================
+# ต่างจาก ems-reminder-check.service ตรงที่สคริปต์นี้ (worker/cron-healthcheck.ts)
+# ต้องใช้ .env เต็มไฟล์ (DATABASE_URL + LINE token) ไม่ใช่แค่ worker/.env.worker
+# เพราะต้อง query ตาราง cron_execution_logs และยิงข้อความ LINE เอง
+#
+# ก่อนใช้งาน ต้องแก้ค่าต่อไปนี้ให้ตรงกับเครื่องจริง (เหมือน ems-reminder-check.service):
+#   - WorkingDirectory / ExecStart: path จริงของ npx บน NAS
+#   - User: ใช้ user เดียวกับที่รันแอป Next.js อยู่แล้ว
+#
+# ติดตั้งและเปิดใช้งาน (ดูรายละเอียดเต็มใน systemd/deploy.sh):
+#   sudo cp systemd/ems-cron-healthcheck.service systemd/ems-cron-healthcheck.timer /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now ems-cron-healthcheck.timer
+
+[Unit]
+Description=EMS Cron Health Check (LINE alert if reminders cron stalls, oneshot)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+WorkingDirectory=/volume1/web/ems-app
+User=CHANGE_ME
+ExecStart=/usr/local/bin/npx tsx worker/cron-healthcheck.ts
+Environment=NODE_ENV=production
+StandardOutput=append:/volume1/web/ems-app/logs/worker.log
+StandardError=append:/volume1/web/ems-app/logs/worker.log

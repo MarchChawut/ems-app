@@ -1,0 +1,80 @@
+# ===============================
+# Dependencies
+# ===============================
+node_modules/
+.pnp
+.pnp.js
+
+# ===============================
+# Next.js build output
+# ===============================
+.next/
+out/
+dist/
+
+# ===============================
+# Environment variables
+# ===============================
+.env
+.env.local
+.env.development
+.env.production
+.env.test
+worker/.env.worker
+
+# ===============================
+# Logs
+# ===============================
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+logs/
+
+# ===============================
+# OS files
+# ===============================
+.DS_Store
+Thumbs.db
+
+# ===============================
+# Editor / IDE
+# ===============================
+.vscode/
+.idea/
+*.swp
+
+# ===============================
+# TypeScript
+# ===============================
+*.tsbuildinfo
+
+# ===============================
+# Cache
+# ===============================
+.cache/
+.eslintcache
+
+# ===============================
+# Playwright (E2E)
+# ===============================
+test-results/
+playwright-report/
+playwright/.cache/
+blob-report/
+
+# ===============================
+# Claude Code & Backups
+# ===============================
+.claude/
+backups/
+
+# ไฟล์ที่ผู้ใช้อัปโหลด/ข้อมูลส่วนบุคคล ห้ามเข้า git และห้ามเสิร์ฟแบบสาธารณะ (เก็บใน DB ผ่าน /api/files)
+public/uploads/
+uploads-private/
+prisma-push.log
+dist-seed/
+ems-admin/
+
+# ไฟล์ขยะจากระบบไฟล์ FUSE (ไฟล์ที่ถูกลบขณะยังเปิดอยู่) — ห้าม commit
+.fuse_hidden*
